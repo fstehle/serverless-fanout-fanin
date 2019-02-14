@@ -10,6 +10,8 @@ provider:
   environment:
     FAN_OUT_QUEUE_URL:
       Ref: FanOutQueue
+    FAN_IN_TABLE:
+      Ref: FanInTable
     NUMBER_OF_WORKER_ITEMS: 25
   iamRoleStatements:
     -  Effect: Allow
@@ -40,6 +42,7 @@ functions:
     handler: handler.ventilator
   worker:
     handler: handler.worker
+    timeout: 300
     events:
       - sqs:
           arn:
@@ -52,22 +55,26 @@ functions:
           type: dynamodb
           arn:
             Fn::GetAtt: FanInTable.StreamArn
+          batchSize: 100
 resources:
   Resources:
     FanOutQueue:
       Type: AWS::SQS::Queue
       Properties:
-        QueueName: ${self:service}-fanout
+        QueueName: ${self:service}-queue
     FanInTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: ${self:service}-fanin
+        TableName: ${self:service}-table
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: id
+          - AttributeName: key
             AttributeType: S
         KeySchema:
-          - AttributeName: id
+          - AttributeName: key
             KeyType: HASH
         StreamSpecification:
           StreamViewType: NEW_AND_OLD_IMAGES
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
