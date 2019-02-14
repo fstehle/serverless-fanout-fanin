@@ -1,0 +1,73 @@
+service: serverless-fanout-fanin
+
+provider:
+  name: aws
+  runtime: python3.7
+  memorySize: 128
+  timeout: 10
+  region: eu-west-1
+  stage: ${opt:stage, 'dev'}
+  environment:
+    FAN_OUT_QUEUE_URL:
+      Ref: FanOutQueue
+    NUMBER_OF_WORKER_ITEMS: 25
+  iamRoleStatements:
+    -  Effect: Allow
+       Action:
+         - sqs:ReceiveMessage
+         - sqs:DeleteMessage
+         - sqs:GetQueueAttributes
+         - sqs:SendMessage
+       Resource:
+         Fn::GetAtt: FanOutQueue.Arn
+    -  Effect: Allow
+       Action:
+         - dynamodb:PutItem
+         - dynamodb:UpdateItem
+         - dynamodb:Query
+         - dynamodb:GetItem
+       Resource:
+         Fn::GetAtt: FanInTable.Arn
+
+package:
+  exclude:
+    - '**/*'
+  include:
+    - 'handler.py'
+
+functions:
+  ventilator:
+    handler: handler.ventilator
+  worker:
+    handler: handler.worker
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: FanOutQueue.Arn
+          batchSize: 10
+  sink:
+    handler: handler.sink
+    events:
+      - stream:
+          type: dynamodb
+          arn:
+            Fn::GetAtt: FanInTable.StreamArn
+resources:
+  Resources:
+    FanOutQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-fanout
+    FanInTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-fanin
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
