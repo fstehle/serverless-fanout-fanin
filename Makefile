@@ -8,4 +8,4 @@ $(SERVERLESS): node_modules
 
 .PHONY: deploy
 deploy: $(SERVERLESS)
-	$(SERVERLESS) deploy --stage=dev
+	$(SERVERLESS) deploy
